@@ -369,3 +369,84 @@ body > main {
     min-height: 44px;
   }
 }
+
+/* Quick Kit Checkout, Live Request Status & Custody Transfer Enhancements */
+#campus-stores .quick-kit-card {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--desk);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+#campus-stores .quick-kit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+#campus-stores .quick-kit-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sel);
+}
+#campus-stores .quick-kit-bins {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--paper);
+  border-radius: 5px;
+  border-left: 3px solid var(--sel);
+  font-size: 12px;
+}
+#campus-stores .kit-items-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+#campus-stores .kit-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+#campus-stores .kit-item-row small {
+  display: block;
+}
+#campus-stores .actions-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+#campus-stores .reassign-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--desk);
+  border: 1px dashed var(--sel);
+  border-radius: 8px;
+}
+#campus-stores .handover-banner {
+  background: var(--memo);
+  color: var(--memotxt);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--mark);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#campus-stores .handover-banner strong {
+  display: block;
+  font-size: 13px;
+}
+#campus-stores .handover-banner span {
+  font-size: 12px;
+}
+
