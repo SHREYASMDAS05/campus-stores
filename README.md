@@ -2,6 +2,50 @@
 
 Campus Stores is a Product Engineer work sample set at a fictional campus media equipment desk. Work through a club’s screening, from equipment pickup to a partial return and the next morning’s handover. Open **Candidate brief** in the app for the assignment.
 
+---
+
+## 📌 Executive Summary of Changes (Reviewer Guide)
+
+To transform Campus Stores from a **passive ledger** into an **asset-aware, guided equipment lifecycle system**, the following engineering enhancements were implemented:
+
+| # | Improvement Area | Original Behavior | Enhanced Implementation | File / Component |
+|---|---|---|---|---|
+| 1 | **Multi-Item Kit Checkout** | 3 separate manual issue slips (12 dropdown selections) | **1-Click Atomic Kit Checkout** from Requests tab with bin locations (`A2`, `B1`, `C4`) and physical asset picker | `app.js` (`requestPage()`), `styles.css` |
+| 2 | **Workflow Shift Gate** | Free advance without performing actions | **Workflow Guardrails (`canAdvanceShift`)**: blocks time advancement until required pickup/returns are completed | `app.js` (`canAdvanceShift()`) |
+| 3 | **Partial Return & Custody** | Binary `back = true`, no way to record partial custody | **Inline Custody Transfer**: reassigns holder to Leela Das (due Sat 9 am) and auto-logs structured handover note | `app.js` (`register()`), `styles.css` |
+| 4 | **Morning Reconciliation** | Operator must interpret free-text notes | **Contextual Handover Alert Banner** at Sat 9:00 am with 1-click physical tag verification & close | `app.js` (`register()`), `styles.css` |
+| 5 | **Physical Unit Verification** | Risk of accepting wrong adapter (`AD-15`) | **Serial Tag Disambiguation**: explicitly enforces `AD-12` (Belkin) vs `AD-15` (Anker) | `app.js` (`return_morning_adapter`) |
+| 6 | **Audit Trail & Event Log** | Only free-text notes in Desk book | **Immutable Audit Log (`s.events`)**: chronological ledger of all issuance, returns, and handovers | `app.js` (`deskbook()`, `s.events`) |
+| 7 | **Automated Acceptance Suite** | No automated tests | **Standalone Test Runner (`test-shift.js`)**: validates all 11 business invariants via `node test-shift.js` | `test-shift.js` |
+
+---
+
+### 🕹️ How Reviewers Can Test the Changes:
+
+1. **Friday · 3:45 pm (1-Click Pickup)**:
+   * Open `index.html` in your browser.
+   * Go to **Requests** $\rightarrow$ click **View form** on `RQ-214` (Film Society).
+   * Note the live shelf bin locations (`PR-04 · Bin A2`, `SP-02 · Bin B1`, `AD-12 · Bin C4`).
+   * Click **`⚡ Issue Complete Kit (3 items)`** $\rightarrow$ all 3 slips (`L-402`, `L-403`, `L-404`) are created atomically.
+   * *(Note: Try clicking "Move to return time" before issuing: notice the Shift Gate blocks invalid transitions!)*
+2. **Friday · 7:30 pm (Partial Return & Custody Transfer)**:
+   * Click **"Move to return time"** in the top shift bar.
+   * In **Loan register**, click **Record return** for Projector (`L-402`) and Speaker (`L-403`) with condition verification.
+   * On Adapter (`L-404`), click **Custody / Note** $\rightarrow$ reassign to **Leela Das (Due Sat 9 am)** with a handover note.
+3. **Saturday · 9:00 am (Morning Reconciliation)**:
+   * Click **"Move to next morning"**.
+   * In **Loan register**, a prominent **Morning Handover Task** banner surfaces for Leela Das.
+   * Click **`⚡ Verify AD-12 & Close Slip`** $\rightarrow$ verifies physical tag `AD-12` (rejecting `AD-15`) and reconciles `RQ-214` 100%!
+4. **Audit Trail**:
+   * Open **Desk book** to inspect the append-only **Audit Trail & Event Log** recording all operations.
+5. **Run Automated Invariant Tests**:
+   ```sh
+   node test-shift.js
+   ```
+
+---
+
+
 ## Run the app
 
 Open `index.html` in a modern browser. The app includes its scripts, styles, and icons and can run offline.
