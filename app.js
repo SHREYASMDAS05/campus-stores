@@ -675,7 +675,7 @@
     if (msg) s.notice = msg;
     paint();
     try {
-      localStorage.setItem(storageKey, JSON.stringify(s));
+      localStorage.setItem(storageKey, core.serializeState(s));
     } catch {
       q("[data-status]").textContent +=
         " Browser storage is unavailable. Progress lasts for this visit.";
@@ -921,39 +921,22 @@
     }
   });
 
-  function restore(d) {
-    if (
-      !d ||
-      d.version !== 2 ||
-      !Object.hasOwn(screens, d.tab) ||
-      !shifts[d.phase] ||
-      (d.selected && !getReq(d.selected)) ||
-      !Array.isArray(d.notes) ||
-      !Array.isArray(d.loans) ||
-      !d.loans.length ||
-      !d.loans.every(
-        (l) =>
-          l && getReq(l.req) && getAsset(l.asset) && Number.isInteger(l.num),
-      )
-    )
-      return;
-    s = {
-      ...createInitialState(),
-      ...d,
-      damagedAssets: Array.isArray(d.damagedAssets) ? [...d.damagedAssets] : [],
-      loans: d.loans.map((l) => ({ ...l })),
-      notes: d.notes.map((n) => ({ ...n })),
-      events: Array.isArray(d.events)
-        ? d.events.map((e) => ({ ...e }))
-        : createInitialState().events,
-    };
-    paint();
+  function restore() {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const res = core.restoreState(raw);
+      s = res.state;
+      if (res.recovered) {
+        s.notice = "⚠️ LocalStorage restored safely (" + res.reason + ").";
+      }
+      paint();
+    } catch {
+      s = createInitialState();
+      paint();
+    }
   }
 
   paint();
-  try {
-    restore(JSON.parse(localStorage.getItem(storageKey)));
-  } catch {
-    // Keep fresh shift when storage fails
-  }
+  restore();
 })();

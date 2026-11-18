@@ -145,14 +145,14 @@
       ],
       notes: [],
       events: [
-        {
+        Object.freeze({
           id: "EVT-100",
           type: "INITIAL_LOAN",
           asset: "MI-09",
           loanNum: 401,
           actor: "Tara Shah",
           time: "Friday · 3:30 pm",
-        },
+        }),
       ],
       editing: false,
       reassigning: null,
@@ -261,15 +261,17 @@
       };
       state.loans.push(slip);
 
-      state.events.push({
-        id: "EVT-" + nextNum + "-" + Date.now().toString(36),
-        type: "ASSET_ISSUED",
-        asset: item.unit.id,
-        loanNum: nextNum,
-        req: reqId,
-        actor: who,
-        time: eventTime,
-      });
+      state.events.push(
+        Object.freeze({
+          id: "EVT-" + nextNum + "-" + Date.now().toString(36),
+          type: "ASSET_ISSUED",
+          asset: item.unit.id,
+          loanNum: nextNum,
+          req: reqId,
+          actor: who,
+          time: eventTime,
+        })
+      );
 
       createdSlips.push(slip);
     }
@@ -391,16 +393,18 @@
       }
     }
 
-    state.events.push({
-      id: "EVT-" + l.num + "-" + Date.now().toString(36),
-      type: "ASSET_RETURNED",
-      asset: l.asset,
-      loanNum: l.num,
-      returnedBy: returnedBy.trim(),
-      condition,
-      disposition: l.returnRecord.disposition,
-      time: eventTime,
-    });
+    state.events.push(
+      Object.freeze({
+        id: "EVT-" + l.num + "-" + Date.now().toString(36),
+        type: "ASSET_RETURNED",
+        asset: l.asset,
+        loanNum: l.num,
+        returnedBy: returnedBy.trim(),
+        condition,
+        disposition: l.returnRecord.disposition,
+        time: eventTime,
+      })
+    );
 
     return l;
   }
@@ -436,15 +440,17 @@
       });
     }
 
-    state.events.push({
-      id: "EVT-CUSTODY-" + l.num + "-" + Date.now().toString(36),
-      type: "CUSTODY_TRANSFERRED",
-      asset: l.asset,
-      loanNum: l.num,
-      from: oldCustodian,
-      to: newCustodian,
-      time: eventTime,
-    });
+    state.events.push(
+      Object.freeze({
+        id: "EVT-CUSTODY-" + l.num + "-" + Date.now().toString(36),
+        type: "CUSTODY_TRANSFERRED",
+        asset: l.asset,
+        loanNum: l.num,
+        from: oldCustodian,
+        to: newCustodian,
+        time: eventTime,
+      })
+    );
 
     return l;
   }
@@ -465,6 +471,56 @@
     );
   }
 
+  /**
+   * State Serialization & Corrupted Storage Recovery
+   */
+  function serializeState(state) {
+    return JSON.stringify(state);
+  }
+
+  function restoreState(rawJson) {
+    if (!rawJson || typeof rawJson !== "string") {
+      return { ok: false, recovered: true, state: createInitialState(), reason: "Empty or non-string state payload." };
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      return { ok: false, recovered: true, state: createInitialState(), reason: "Corrupted JSON format." };
+    }
+
+    if (!parsed || typeof parsed !== "object" || parsed.version !== 2) {
+      return { ok: false, recovered: true, state: createInitialState(), reason: "Incompatible schema version." };
+    }
+
+    if (!Array.isArray(parsed.loans) || !parsed.loans.length) {
+      return { ok: false, recovered: true, state: createInitialState(), reason: "Missing loan records." };
+    }
+
+    const loansValid = parsed.loans.every(
+      (l) => l && getReq(l.req) && getAsset(l.asset) && Number.isInteger(l.num),
+    );
+    if (!loansValid) {
+      return { ok: false, recovered: true, state: createInitialState(), reason: "Malformed asset/request foreign keys." };
+    }
+
+    const cleanState = {
+      ...createInitialState(),
+      ...parsed,
+      damagedAssets: Array.isArray(parsed.damagedAssets) ? [...new Set(parsed.damagedAssets)] : [],
+      loans: parsed.loans.map((l) => ({
+        ...l,
+        custodyHistory: Array.isArray(l.custodyHistory) ? [...l.custodyHistory] : [],
+      })),
+      notes: Array.isArray(parsed.notes) ? [...parsed.notes] : [],
+      events: Array.isArray(parsed.events)
+        ? parsed.events.map((e) => Object.freeze({ ...e }))
+        : createInitialState().events,
+    };
+
+    return { ok: true, recovered: false, state: cleanState };
+  }
+
   return {
     requests,
     assets,
@@ -483,5 +539,7 @@
     executeReturn,
     executeCustodyTransfer,
     getMorningOutstandingLoan,
+    serializeState,
+    restoreState,
   };
 });

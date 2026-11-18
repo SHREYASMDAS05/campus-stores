@@ -18,8 +18,8 @@ To transform Campus Stores from a **passive ledger** into an **asset-aware, guid
 | 4 | **Dynamic Asset Damage Lifecycle** | Returned damaged hardware remained "On shelf" in inventory | **Dynamic Lifecycle Transition**: Marking an item as "Damaged" or "Send to Workshop" immediately transitions its status to `In repair`, preventing re-loan. | `campus-stores-core.js` (`getAssetStatus`, `damagedAssets`) |
 | 5 | **Custody Transfer History** | Overwrote original borrower when reassigning custody | **Custody Lineage Tracking**: Preserves `originalBorrower: "Kabir Sen"` while tracking `currentCustodian: "Leela Das"` and logging chronological `custodyHistory`. | `campus-stores-core.js` (`executeCustodyTransfer`) |
 | 6 | **Precise Morning Handover Query** | Broad OR query (`Leela Das` OR `RQ-214` OR `Sat 9 am`) | **Deterministic Handover Matching**: Specifically targets the outstanding Film Society screening adapter loan for morning reconciliation. | `campus-stores-core.js` (`getMorningOutstandingLoan`) |
-| 7 | **Audit Trail & XSS Protection** | Free-text notes only | **Immutable Event Log (`s.events`)**: Append-only operational event ledger with DOM escaping on all user-controlled properties. | `app.js` (`deskbook()`), `campus-stores-core.js` |
-| 8 | **Automated Acceptance Testing** | No automated tests | **Direct Production Testing**: 11 acceptance and domain invariant tests executed directly against `campus-stores-core.js`. | `test-shift.js` |
+| 7 | **Audit Trail & Immutability** | Free-text notes only | **Append-Only Event Log (`s.events`)**: Chronological operational ledger protected with `Object.freeze()` and DOM escaping. | `app.js` (`deskbook()`), `campus-stores-core.js` |
+| 8 | **Automated Acceptance & Recovery Suite** | No automated tests | **Direct Production Testing**: 15 acceptance, domain invariant, and corrupted-storage recovery tests executed directly against `campus-stores-core.js`. | `test-shift.js` |
 
 ---
 
@@ -133,15 +133,15 @@ Rather than claiming speculative historical metrics, the following quantitative 
 
 ---
 
-### 5. Automated Acceptance Test Suite (`test-shift.js`)
+### 5. Automated Acceptance & Recovery Test Suite (`test-shift.js`)
 
-An automated test suite is included in `test-shift.js`. It runs directly against `campus-stores-core.js` and validates all 11 business invariants:
+An automated test suite is included in `test-shift.js`. It runs directly against `campus-stores-core.js` and validates 15 business invariants, edge cases, and storage recovery scenarios:
 
 ```sh
 node test-shift.js
 ```
 
-**Verified Invariants**:
+**Verified Invariants & Edge Cases**:
 1. Initial starting records contain exactly 1 active loan (`Debate Union MI-09`) and clean damage log.
 2. Shift Gate blocks advancing to Friday evening if Film Society kit has not been issued.
 3. Inventory Guardrail rejects issuing `PR-06` (in Workshop repair) without state mutation.
@@ -153,10 +153,17 @@ node test-shift.js
 9. Structured Return of damaged hardware dynamically transitions its inventory status to `In repair`.
 10. Custody Transfer preserves `originalBorrower: Kabir Sen` while tracking `who: Leela Das` and appending `custodyHistory`.
 11. Physical asset disambiguation rejects wrong asset tag (`AD-15`), verifies `AD-12`, and reconciles `RQ-214` 100% while keeping `MI-09` open.
+12. Audit trail events are frozen via `Object.freeze()` and strictly reject runtime modification.
+13. Corrupted LocalStorage payload (malformed JSON) safely triggers clean recovery.
+14. Incompatible schema version gracefully falls back to clean schema v2.
+15. Tampered loan state with invalid foreign key references is rejected cleanly.
 
 ---
 
 ### 6. Architectural Proposal: Scaling to Distributed Multi-Counter Operations with Redis
+
+> [!NOTE]
+> **Architecture Boundary:** The present prototype is intentionally an offline-first, single-terminal client application utilizing browser LocalStorage. The Redis architecture outlined below is a proposed scaling design for multi-counter university operations, not an active backend dependency of this prototype.
 
 While a local offline-first architecture is ideal for single-terminal reliability, scaling this system across multiple campus desks requires a distributed backend. Here is the proposed architecture using **Redis**:
 

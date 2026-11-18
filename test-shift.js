@@ -210,6 +210,49 @@ test("Reconciliation strictly rejects wrong tag (AD-15) and verifies correct tag
   assert.strictEqual(state.events.length >= 7, true);
 });
 
+// 12. Event Immutability Enforcement (Object.freeze)
+test("Audit trail events are frozen and strictly reject runtime modification", () => {
+  const latestEvent = state.events[state.events.length - 1];
+  assert.strictEqual(Object.isFrozen(latestEvent), true);
+  assert.throws(() => {
+    "use strict";
+    latestEvent.actor = "Unauthorized Modifier";
+  }, TypeError);
+});
+
+// 13. Corrupted LocalStorage Recovery
+test("Corrupted LocalStorage payload (malformed JSON) safely triggers clean recovery", () => {
+  const recovery = core.restoreState("{ corrupted json non-closed string");
+  assert.strictEqual(recovery.ok, false);
+  assert.strictEqual(recovery.recovered, true);
+  assert.strictEqual(recovery.state.loans.length, 1);
+  assert.match(recovery.reason, /Corrupted JSON format/);
+});
+
+// 14. Incompatible Schema Version Recovery
+test("Incompatible schema version gracefully falls back to clean schema v2", () => {
+  const recovery = core.restoreState(JSON.stringify({ version: 999, loans: [] }));
+  assert.strictEqual(recovery.ok, false);
+  assert.strictEqual(recovery.recovered, true);
+  assert.strictEqual(recovery.state.version, 2);
+  assert.match(recovery.reason, /Incompatible schema version/);
+});
+
+// 15. Tampered Loan Data Integrity Protection
+test("Tampered loan state with invalid foreign key references is rejected cleanly", () => {
+  const tamperedState = {
+    version: 2,
+    loans: [
+      { num: 999, req: "NON-EXISTENT-REQ", asset: "NON-EXISTENT-ASSET", who: "Ghost", due: "Never", back: false },
+    ],
+  };
+  const recovery = core.restoreState(JSON.stringify(tamperedState));
+  assert.strictEqual(recovery.ok, false);
+  assert.strictEqual(recovery.recovered, true);
+  assert.strictEqual(recovery.state.loans[0].asset, "MI-09");
+  assert.match(recovery.reason, /Malformed asset\/request foreign keys/);
+});
+
 console.log("\n--------------------------------------------------------");
-console.log(`  🎉 ALL 11/11 PRODUCTION INVARIANT CHECKS PASSED!      `);
+console.log(`  🎉 ALL 15/15 PRODUCTION INVARIANT & RECOVERY CHECKS PASSED! `);
 console.log("--------------------------------------------------------\n");
