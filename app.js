@@ -1,133 +1,47 @@
 (() => {
-  const storageKey = "campus-stores.shift.v1";
+  "use strict";
+
+  const core = (typeof CampusStoresCore !== "undefined") ? CampusStoresCore : null;
+  if (!core) {
+    console.error("CampusStoresCore engine failed to load.");
+    return;
+  }
+
+  const {
+    requests,
+    assets,
+    people,
+    shifts,
+    getAsset,
+    getReq,
+    createInitialState,
+    validateKitCheckout,
+    executeKitCheckout,
+    canAdvanceShift,
+    validateReturn,
+    executeReturn,
+    executeCustodyTransfer,
+    getMorningOutstandingLoan,
+  } = core;
+
+  const storageKey = "campus-stores.shift.v2";
   const root = document.getElementById("campus-stores");
   const q = (selector) => root.querySelector(selector);
-  const requests = [
-    {
-      id: "RQ-214",
-      club: "Film Society",
-      event: "Courtyard screening",
-      owner: "Isha Rao",
-      due: "Fri 8 pm",
-      items: ["HDMI projector", "Portable speaker", "USB-C → HDMI adapter"],
-      note: "Playback is from a USB-C-only laptop. The host will collect at 4 pm.",
-    },
-    {
-      id: "RQ-209",
-      club: "Debate Union",
-      event: "Finals rehearsal",
-      owner: "Tara Shah",
-      due: "Sat 10 am",
-      items: ["Wireless microphone"],
-      note: "Rehearsal runs into the evening.",
-    },
-    {
-      id: "RQ-217",
-      club: "Photo Circle",
-      event: "Street portrait walk",
-      owner: "Dev Menon",
-      due: "Sat noon",
-      items: ["Digital camera"],
-      note: "Collection on Saturday morning.",
-    },
-  ];
-  const assets = [
-    { id: "PR-04", type: "HDMI projector", model: "BenQ MH550", bin: "A2" },
-    {
-      id: "PR-06",
-      type: "HDMI projector",
-      model: "Epson EB-X49",
-      bin: "Workshop",
-      repair: true,
-    },
-    { id: "SP-02", type: "Portable speaker", model: "JBL Eon One", bin: "B1" },
-    { id: "SP-05", type: "Portable speaker", model: "Bose S1", bin: "B2" },
-    {
-      id: "AD-12",
-      type: "USB-C → HDMI adapter",
-      model: "Belkin AVC002",
-      bin: "C4",
-    },
-    {
-      id: "AD-15",
-      type: "USB-C → HDMI adapter",
-      model: "Anker A8312",
-      bin: "C4",
-    },
-    { id: "MI-09", type: "Wireless microphone", model: "Shure BLX", bin: "B3" },
-    { id: "CA-03", type: "Digital camera", model: "Sony A6400", bin: "D2" },
-  ];
-  const people = [
-    "Isha Rao",
-    "Kabir Sen",
-    "Leela Das",
-    "Tara Shah",
-    "Dev Menon",
-  ];
-  const shifts = [
-    {
-      time: "Friday · 3:45 pm",
-      title: "Pickup at the counter",
-      text: "Kabir is here for the Film Society screening. The film starts at four. Can he leave with everything he needs?",
-      next: "Move to return time",
-    },
-    {
-      time: "Friday · 7:30 pm",
-      title: "The kit comes back in pieces",
-      text: "Kabir has brought back the projector and speaker. “Leela still has the adapter. She’ll drop it off tomorrow at nine.” Take the return and hand over to the morning shift.",
-      next: "Move to next morning",
-    },
-    {
-      time: "Saturday · 9:00 am",
-      title: "Morning shift",
-      text: "You’ve just taken over. Leela walks in with an adapter. Work out what was outstanding from the screening and close the loan for the right item.",
-    },
-  ];
+
   const pages = [
     ["Requests", "clipboard-list"],
     ["Inventory", "package"],
     ["Loan register", "book-open"],
     ["Desk book", "messages-square"],
   ];
-  const original = () => ({
-    version: 1,
-    tab: "Requests",
-    phase: 0,
-    selected: "",
-    filter: "All items",
-    loans: [
-      {
-        num: 401,
-        req: "RQ-209",
-        asset: "MI-09",
-        who: "Tara Shah",
-        due: "Sat 10 am",
-        back: false,
-      },
-    ],
-    notes: [],
-    events: [
-      {
-        id: "EVT-100",
-        type: "INITIAL_LOAN",
-        asset: "MI-09",
-        loanNum: 401,
-        actor: "Tara Shah",
-        time: "Friday · 3:30 pm",
-      },
-    ],
-    editing: false,
-    reassigning: null,
-    returningLoan: null,
-    onlyOpen: true,
-    notice: "Sample shift · All records are fictional.",
-  });
-  let s = original();
-  const getAsset = (id) => assets.find((x) => x.id === id);
-  const getReq = (id) => requests.find((x) => x.id === id);
-  const out = (id) => s.loans.find((l) => l.asset === id && !l.back);
+
+  let s = createInitialState();
+
+  const out = (id) => core.isAssetOut(s, id);
+  const inRepair = (id) => core.isAssetInRepair(s, id);
+
   const esc = (x) =>
-    String(x).replace(
+    String(x == null ? "" : x).replace(
       /[&<>"']/g,
       (c) =>
         ({
@@ -138,10 +52,12 @@
           "'": "&#39;",
         })[c],
     );
+
   const opts = (list) =>
     list
       .map(([v, t]) => '<option value="' + esc(v) + '">' + esc(t) + "</option>")
       .join("");
+
   const btn = (label, act, val = "", style = "") =>
     '<button type="button" data-action="' +
     act +
@@ -152,6 +68,7 @@
     '">' +
     esc(label) +
     "</button>";
+
   const head = (title, sub, control = "") =>
     '<div class="sectionhead"><div><h2>' +
     title +
@@ -160,6 +77,7 @@
     "</small></div>" +
     control +
     "</div>";
+
   const row = (label, sub, right) =>
     '<div class="row"><div><strong>' +
     esc(label) +
@@ -168,8 +86,10 @@
     "</small></div><div>" +
     right +
     "</div></div>";
+
   const badge = (t, good = false) =>
     '<span class="tag' + (good ? " good" : "") + '">' + esc(t) + "</span>";
+
   function requestPage() {
     let html = head(
       "Approved requests",
@@ -186,7 +106,7 @@
           (l) => l.req === r.id && l.back && getAsset(l.asset).type === itemType,
         );
         const availableUnit = assets.find(
-          (a) => a.type === itemType && !a.repair && !out(a.id),
+          (a) => a.type === itemType && !inRepair(a.id) && !out(a.id),
         );
         return { itemType, activeLoan, returnedLoan, availableUnit };
       });
@@ -199,15 +119,15 @@
       html +=
         btn("← Back to list", "close") +
         '<div class="record"><small>' +
-        r.id +
+        esc(r.id) +
         " · Approved</small><h3>" +
-        r.event +
+        esc(r.event) +
         "</h3><p>" +
-        r.club +
+        esc(r.club) +
         " · Filed by " +
-        r.owner +
+        esc(r.owner) +
         "</p><p><b>Return by</b> " +
-        r.due +
+        esc(r.due) +
         "</p><p style='margin-top:8px;'><b>Approved equipment & live desk status:</b></p><div class='kit-items-list'>" +
         itemStatus
           .map((x) => {
@@ -215,13 +135,31 @@
             let binInfo = "";
             if (x.activeLoan) {
               statusBadge = badge("On loan · Slip L-" + x.activeLoan.num, false);
-              binInfo = "<small class='muted'>Held by " + esc(x.activeLoan.who) + " · Due " + esc(x.activeLoan.due) + " (" + x.activeLoan.asset + ")</small>";
+              binInfo =
+                "<small class='muted'>Held by " +
+                esc(x.activeLoan.who) +
+                (x.activeLoan.originalBorrower && x.activeLoan.originalBorrower !== x.activeLoan.who
+                  ? " (originally " + esc(x.activeLoan.originalBorrower) + ")"
+                  : "") +
+                " · Due " +
+                esc(x.activeLoan.due) +
+                " (" +
+                esc(x.activeLoan.asset) +
+                ")</small>";
             } else if (x.returnedLoan) {
               statusBadge = badge("Returned · Slip L-" + x.returnedLoan.num, true);
-              binInfo = "<small class='muted'>Returned to shelf (" + x.returnedLoan.asset + ")</small>";
+              binInfo =
+                "<small class='muted'>Returned to stock (" +
+                esc(x.returnedLoan.asset) +
+                ")</small>";
             } else if (x.availableUnit) {
               statusBadge = badge("Ready in Bin " + x.availableUnit.bin, true);
-              binInfo = "<small class='muted'>Unit " + x.availableUnit.id + " (" + x.availableUnit.model + ")</small>";
+              binInfo =
+                "<small class='muted'>Unit " +
+                esc(x.availableUnit.id) +
+                " (" +
+                esc(x.availableUnit.model) +
+                ")</small>";
             } else {
               statusBadge = badge("Unavailable", false);
               binInfo = "<small class='muted'>No units ready in stock</small>";
@@ -238,19 +176,23 @@
           })
           .join("") +
         "</div><p style='margin-top:8px;'><b>Note:</b> " +
-        r.note +
+        esc(r.note) +
         "</p></div>";
 
-      // If unissued items exist, render Quick Kit Checkout with unit selection
+      // If unissued items exist, render Two-Stage Atomic Quick Kit Checkout with unit selection
       if (!allIssued) {
         const defaultCollector = (r.id === "RQ-214") ? "Kabir Sen" : r.owner;
         const unitSelectors = unissuedItems
           .map((x) => {
             const availUnits = assets.filter(
-              (a) => a.type === x.itemType && !a.repair && !out(a.id),
+              (a) => a.type === x.itemType && !inRepair(a.id) && !out(a.id),
             );
             if (!availUnits.length) {
-              return "<p><small style='color:var(--mark);'>No units available for " + esc(x.itemType) + "</small></p>";
+              return (
+                "<p><small style='color:var(--mark);'>No units available for " +
+                esc(x.itemType) +
+                "</small></p>"
+              );
             }
             return (
               "<label><span>" +
@@ -279,18 +221,44 @@
 
         html +=
           "<div class='quick-kit-card'>" +
-          "<div class='quick-kit-header'><h4>⚡ Quick Kit Checkout</h4><small>Issue all ready items in 1 click</small></div>" +
-          "<form data-quick-kit='" + esc(r.id) + "'>" +
+          "<div class='quick-kit-header'><h4>⚡ Quick Kit Checkout</h4><small>Two-stage atomic checkout</small></div>" +
+          "<form data-quick-kit='" +
+          esc(r.id) +
+          "'>" +
           "<div class='form'>" +
           "<label><span>Collected by</span><select name='who'>" +
-          people.map((p) => "<option value='" + esc(p) + "'" + (p === defaultCollector ? " selected" : "") + ">" + esc(p) + "</option>").join("") +
+          people
+            .map(
+              (p) =>
+                "<option value='" +
+                esc(p) +
+                "'" +
+                (p === defaultCollector ? " selected" : "") +
+                ">" +
+                esc(p) +
+                "</option>",
+            )
+            .join("") +
           "</select></label>" +
           "<label><span>Return by</span><select name='due'>" +
-          ["Fri 8 pm", "Sat 9 am", "Sat 10 am", "Sat noon"].map((d) => "<option value='" + esc(d) + "'" + (d === r.due ? " selected" : "") + ">" + esc(d) + "</option>").join("") +
+          ["Fri 8 pm", "Sat 9 am", "Sat 10 am", "Sat noon"]
+            .map(
+              (d) =>
+                "<option value='" +
+                esc(d) +
+                "'" +
+                (d === r.due ? " selected" : "") +
+                ">" +
+                esc(d) +
+                "</option>",
+            )
+            .join("") +
           "</select></label>" +
           unitSelectors +
           "</div>" +
-          "<button type='submit' class='primary' style='margin-top:10px;'>⚡ Issue Complete Kit (" + unissuedItems.length + " items)</button>" +
+          "<button type='submit' class='primary' style='margin-top:10px;'>⚡ Issue Complete Kit (" +
+          unissuedItems.length +
+          " items)</button>" +
           "</form></div>";
       } else {
         html +=
@@ -312,7 +280,10 @@
           } else if (returnedLoans === totalItems) {
             summaryBadge = badge("Completed", true);
           } else if (activeLoans > 0 || returnedLoans > 0) {
-            summaryBadge = badge("Partial (" + (activeLoans + returnedLoans) + "/" + totalItems + ")", false);
+            summaryBadge = badge(
+              "Partial (" + (activeLoans + returnedLoans) + "/" + totalItems + ")",
+              false,
+            );
           } else {
             summaryBadge = badge("Ready to issue", true);
           }
@@ -326,10 +297,11 @@
     }
     return html;
   }
+
   function inventory() {
     let html = head(
       "Inventory",
-      "Physical units · home shelf and current availability",
+      "Physical units · home shelf and dynamic lifecycle status",
     );
     html +=
       '<div class="buttons"><label>Show <select data-filter>' +
@@ -338,11 +310,7 @@
       ) +
       "</select></label></div>";
     for (const a of assets) {
-      const status = a.repair
-        ? "In repair"
-        : out(a.id)
-          ? "On loan"
-          : "On shelf";
+      const status = core.getAssetStatus(s, a.id);
       if (s.filter !== "All items" && s.filter !== status) continue;
       html += row(
         a.id + " · " + a.type,
@@ -352,25 +320,47 @@
     }
     return html;
   }
+
   function register() {
     let html = "";
+
+    // Precise morning handover reconciliation task
     if (s.phase === 2) {
-      const morningLoan = s.loans.find(
-        (l) => !l.back && (l.who === "Leela Das" || l.req === "RQ-214" || l.due === "Sat 9 am"),
-      );
+      const morningLoan = getMorningOutstandingLoan(s);
       if (morningLoan) {
         const assetObj = getAsset(morningLoan.asset);
         html +=
           "<div class='handover-banner'>" +
           "<div class='handover-text'>" +
           "<strong>🔔 Morning Handover Task (9:00 am):</strong>" +
-          "<span>Leela Das is returning <b>" + esc(morningLoan.asset) + "</b> (" + esc(assetObj ? assetObj.type + " · " + assetObj.model : "Equipment") + " · Slip L-" + morningLoan.num + ") for Film Society.</span>" +
-          "<small style='display:block;margin-top:3px;color:var(--mark);font-weight:600;'>⚠️ Verify Physical Tag: Confirm unit is AD-12 (Belkin), NOT AD-15 (Anker).</small>" +
+          "<span>Leela Das is returning the screening adapter for Film Society (Slip L-" +
+          morningLoan.num +
+          ").</span>" +
+          "<small style='display:block;margin-top:3px;'>Expected Unit: <b>" +
+          esc(morningLoan.asset) +
+          "</b> (" +
+          esc(assetObj.model) +
+          " · Bin " +
+          esc(assetObj.bin) +
+          ")</small>" +
+          "<small style='display:block;color:var(--mark);font-weight:600;'>⚠️ Verify Physical Hardware Tag: Enter the tag on the item to reconcile.</small>" +
           "</div>" +
-          btn("⚡ Verify AD-12 & Close Slip", "return_morning_adapter", String(morningLoan.num), "primary") +
+          "<form data-verify-morning class='handover-verify-form' style='margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;'>" +
+          "<input type='hidden' name='loanNum' value='" +
+          morningLoan.num +
+          "'>" +
+          "<label style='display:flex; gap:6px; align-items:center; font-size:12px; font-weight:600;'>" +
+          "<span>Physical Tag on Hardware:</span>" +
+          "<input type='text' name='presentedTag' placeholder='e.g. " +
+          esc(morningLoan.asset) +
+          "' style='width:95px; text-transform:uppercase;' required>" +
+          "</label>" +
+          "<button type='submit' class='primary'>Verify Tag & Reconcile Loan</button>" +
+          "</form>" +
           "</div>";
       }
     }
+
     html += head(
       "Loan register",
       "One slip per physical unit",
@@ -378,8 +368,9 @@
         ? btn("Cancel", "cancel")
         : btn("New issue slip", "new", "", "primary"),
     );
+
     if (s.editing) {
-      const available = assets.filter((a) => !a.repair && !out(a.id));
+      const available = assets.filter((a) => !inRepair(a.id) && !out(a.id));
       const select = (label, key, options) =>
         "<label><span>" +
         label +
@@ -414,6 +405,7 @@
         '</div><button type="submit" class="primary">Save issue slip</button></form>'
       );
     }
+
     html +=
       '<div class="buttons">' +
       ["Outstanding", "All slips"]
@@ -429,21 +421,34 @@
         )
         .join("") +
       "</div>";
+
     const shown = s.loans
       .filter((l) => !s.onlyOpen || !l.back)
       .slice()
       .reverse();
+
     if (!shown.length) html += "<p>No outstanding slips.</p>";
+
     for (const l of shown) {
       const isReassigning = s.reassigning === l.num;
       const isReturning = s.returningLoan === l.num;
       let returnRecordBadge = "";
+
       if (l.back) {
         const rec = l.returnRecord;
         returnRecordBadge =
           badge("Returned", true) +
-          (rec ? "<small class='muted' style='display:block;margin-top:2px;'>By " + esc(rec.returnedBy) + " · " + esc(rec.condition) + "</small>" : "");
+          (rec
+            ? "<small class='muted' style='display:block;margin-top:2px;'>By " +
+              esc(rec.returnedBy) +
+              " · " +
+              esc(rec.condition) +
+              " (" +
+              esc(rec.disposition) +
+              ")</small>"
+            : "");
       }
+
       const rightSide = l.back
         ? returnRecordBadge
         : '<div class="actions-group">' +
@@ -451,44 +456,106 @@
           btn("Custody / Note", "start_reassign", String(l.num)) +
           "</div>";
 
+      const custodianInfo =
+        l.originalBorrower && l.originalBorrower !== l.who
+          ? " · Held by " + esc(l.who) + " (originally " + esc(l.originalBorrower) + ")"
+          : " · " + esc(l.who);
+
       html += row(
         "L-" + l.num + " · " + l.asset,
-        l.req + " · " + l.who + " · Due " + l.due,
+        l.req + custodianInfo + " · Due " + l.due,
         rightSide,
       );
 
+      // Return verification form with physical tag check
       if (isReturning) {
         const assetObj = getAsset(l.asset);
         html +=
-          "<form data-confirm-return='" + l.num + "' class='reassign-box'>" +
+          "<form data-confirm-return='" +
+          l.num +
+          "' class='reassign-box'>" +
           "<div style='font-weight:600; margin-bottom:4px;'>Physical Asset Return Verification</div>" +
-          "<p><small>Verifying physical unit: <b>" + esc(l.asset) + "</b> (" + esc(assetObj.type) + " · " + esc(assetObj.model) + ")</small></p>" +
-          (l.asset === "AD-12" ? "<p style='color:var(--mark);font-weight:600;'><small>⚠️ Caution: Verify physical tag reads AD-12 (Belkin). Do NOT accept AD-15 (Anker)!</small></p>" : "") +
+          "<p><small>Issued Unit: <b>" +
+          esc(l.asset) +
+          "</b> (" +
+          esc(assetObj.type) +
+          " · " +
+          esc(assetObj.model) +
+          ")</small></p>" +
           "<div class='form'>" +
+          "<label><span>Verify Physical Hardware Tag</span><input type='text' name='presentedTag' value='" +
+          esc(l.asset) +
+          "' style='text-transform:uppercase;' placeholder='Enter tag on hardware' required></label>" +
           "<label><span>Returned by</span><select name='returnedBy'>" +
-          people.map((p) => "<option value='" + esc(p) + "'" + (p === l.who ? " selected" : "") + ">" + esc(p) + "</option>").join("") +
+          people
+            .map(
+              (p) =>
+                "<option value='" +
+                esc(p) +
+                "'" +
+                (p === l.who ? " selected" : "") +
+                ">" +
+                esc(p) +
+                "</option>",
+            )
+            .join("") +
           "</select></label>" +
-          "<label><span>Condition</span><select name='condition'><option value='Good'>Good · Working</option><option value='Damaged'>Damaged / Needs Inspection</option></select></label>" +
-          "<label class='full'><span>Shelf Destination</span><select name='disposition'><option value='Returned to shelf (Bin " + esc(assetObj.bin) + ")'>Returned to shelf (Bin " + esc(assetObj.bin) + ")</option><option value='Send to Workshop'>Send to Workshop</option></select></label>" +
+          "<label><span>Condition</span><select name='condition'><option value='Good'>Good · Working</option><option value='Damaged'>Damaged / Needs Workshop Inspection</option></select></label>" +
+          "<label><span>Shelf Destination</span><select name='disposition'><option value='Returned to shelf (Bin " +
+          esc(assetObj.bin) +
+          ")'>Returned to shelf (Bin " +
+          esc(assetObj.bin) +
+          ")</option><option value='Send to Workshop'>Send to Workshop</option></select></label>" +
           "</div>" +
           "<div class='actions-group'>" +
-          "<button type='submit' class='primary'>Confirm Return & Restore to Stock</button>" +
+          "<button type='submit' class='primary'>Confirm Return & Update Stock</button>" +
           btn("Cancel", "cancel_return") +
           "</div>" +
           "</form>";
       }
 
+      // Custody transfer form preserving original borrower
       if (isReassigning) {
         const defaultNext = (l.who === "Kabir Sen") ? "Leela Das" : people[0];
         const defaultDue = (s.phase >= 1) ? "Sat 9 am" : l.due;
         html +=
-          "<form data-reassign='" + l.num + "' class='reassign-box'>" +
+          "<form data-reassign='" +
+          l.num +
+          "' class='reassign-box'>" +
+          "<div style='font-weight:600; margin-bottom:4px;'>Transfer Equipment Custody</div>" +
+          "<p><small>Original Collector: <b>" +
+          esc(l.originalBorrower || l.who) +
+          "</b> · Current Custodian: <b>" +
+          esc(l.who) +
+          "</b></small></p>" +
           "<div class='form'>" +
           "<label><span>Reassign custody to</span><select name='who'>" +
-          people.map((p) => "<option value='" + esc(p) + "'" + (p === defaultNext ? " selected" : "") + ">" + esc(p) + "</option>").join("") +
+          people
+            .map(
+              (p) =>
+                "<option value='" +
+                esc(p) +
+                "'" +
+                (p === defaultNext ? " selected" : "") +
+                ">" +
+                esc(p) +
+                "</option>",
+            )
+            .join("") +
           "</select></label>" +
           "<label><span>New return time</span><select name='due'>" +
-          ["Fri 8 pm", "Sat 9 am", "Sat 10 am", "Sat noon"].map((d) => "<option value='" + esc(d) + "'" + (d === defaultDue ? " selected" : "") + ">" + esc(d) + "</option>").join("") +
+          ["Fri 8 pm", "Sat 9 am", "Sat 10 am", "Sat noon"]
+            .map(
+              (d) =>
+                "<option value='" +
+                esc(d) +
+                "'" +
+                (d === defaultDue ? " selected" : "") +
+                ">" +
+                esc(d) +
+                "</option>",
+            )
+            .join("") +
           "</select></label>" +
           "<label class='full'><span>Handover note for Desk book</span><input type='text' name='note' value='Kabir returned kit; Leela holds adapter for morning shift.' required></label>" +
           "</div>" +
@@ -501,6 +568,7 @@
     }
     return html;
   }
+
   function deskbook() {
     let html = head(
       "Desk book",
@@ -526,6 +594,7 @@
       ]);
     for (const n of s.notes)
       entries.push([shifts[n.phase].time, "Counter handover", n.text]);
+
     for (const [t, author, body] of entries.slice().reverse())
       html +=
         '<article class="record"><small>' +
@@ -535,10 +604,11 @@
         "</h3><p>" +
         esc(body) +
         "</p></article>";
+
     html +=
       '<form data-note><div class="form"><label class="full"><span>Note for the next shift</span><textarea name="note" rows="2" maxlength="400" required></textarea></label></div><button type="submit">Add handover note</button></form>';
 
-    // Append Audit Trail & Event History
+    // Fully escaped Audit Trail & Event History
     html +=
       '<div class="sectionhead" style="margin-top:24px;border-top:1px solid var(--line);padding-top:14px;"><div><h3>Audit Trail & Event Log</h3><small>Immutable chronological log · ' +
       s.events.length +
@@ -552,12 +622,13 @@
             esc(e.type) +
             (e.asset ? " · " + esc(e.asset) : "") +
             "</strong><small class='muted'>" +
-            (e.actor || e.returnedBy || "") +
-            (e.loanNum ? " (Slip L-" + e.loanNum + ")" : "") +
+            esc(e.actor || e.returnedBy || "") +
+            (e.loanNum ? " (Slip L-" + esc(e.loanNum) + ")" : "") +
             " · " +
             esc(e.time) +
+            (e.condition ? " · Condition: " + esc(e.condition) : "") +
             "</small></div><div>" +
-            badge(e.id, true) +
+            badge(esc(e.id), true) +
             "</div></div>",
         )
         .join("") +
@@ -565,53 +636,14 @@
 
     return html;
   }
-  function canAdvanceShift() {
-    if (s.phase === 0) {
-      const r = getReq("RQ-214");
-      const activeLoans = s.loans.filter((l) => l.req === "RQ-214" && !l.back);
-      if (activeLoans.length < r.items.length) {
-        return {
-          allowed: false,
-          reason:
-            "Film Society kit (RQ-214) has not been issued yet. Issue the kit to Kabir Sen before moving to evening return.",
-        };
-      }
-    }
-    if (s.phase === 1) {
-      const returnedProj = s.loans.find(
-        (l) => l.req === "RQ-214" && l.asset === "PR-04" && l.back,
-      );
-      const returnedSpeaker = s.loans.find(
-        (l) => l.req === "RQ-214" && l.asset === "SP-02" && l.back,
-      );
-      if (!returnedProj || !returnedSpeaker) {
-        return {
-          allowed: false,
-          reason:
-            "Record return of projector (PR-04) and speaker (SP-02) from Kabir Sen before moving to morning shift.",
-        };
-      }
-      const adapterLoan = s.loans.find(
-        (l) => l.req === "RQ-214" && l.asset.startsWith("AD-") && !l.back,
-      );
-      if (adapterLoan && adapterLoan.who !== "Leela Das") {
-        return {
-          allowed: false,
-          reason:
-            "Reassign adapter (Slip L-" +
-            adapterLoan.num +
-            ") custody to Leela Das (Due Sat 9 am) before morning handover.",
-        };
-      }
-    }
-    return { allowed: true };
-  }
+
   const screens = {
     Requests: requestPage,
     Inventory: inventory,
     "Loan register": register,
     "Desk book": deskbook,
   };
+
   function paint() {
     const phase = shifts[s.phase];
     q("[data-clock]").textContent = phase.time;
@@ -638,6 +670,7 @@
     if (q("[data-filter]")) q("[data-filter]").value = s.filter;
     q("[data-status]").textContent = s.notice;
   }
+
   function commit(msg) {
     if (msg) s.notice = msg;
     paint();
@@ -648,16 +681,17 @@
         " Browser storage is unavailable. Progress lasts for this visit.";
     }
   }
+
   root.addEventListener("click", (e) => {
     const b = e.target.closest("[data-action]");
     if (!b) return;
     const v = b.dataset.val;
     switch (b.dataset.action) {
       case "restart":
-        s = original();
+        s = createInitialState();
         break;
       case "advance": {
-        const check = canAdvanceShift();
+        const check = canAdvanceShift(s);
         if (!check.allowed) {
           s.notice = "⚠️ " + check.reason;
           break;
@@ -666,7 +700,7 @@
         s.reassigning = null;
         s.returningLoan = null;
         s.events.push({
-          id: "EVT-" + Date.now(),
+          id: "EVT-SHIFT-" + Date.now().toString(36),
           type: "SHIFT_ADVANCED",
           time: shifts[s.phase].time,
           actor: "Counter staff",
@@ -702,32 +736,6 @@
       case "cancel_return":
         s.returningLoan = null;
         break;
-      case "return_morning_adapter": {
-        const num = Number(v);
-        const l = s.loans.find((l) => l.num === num);
-        if (!l || l.back) return;
-        l.back = true;
-        l.returnRecord = {
-          returnedAt: shifts[s.phase].time,
-          returnedBy: "Leela Das",
-          condition: "Good",
-          disposition: "Returned to shelf (Bin C4)",
-        };
-        s.events.push({
-          id: "EVT-" + Date.now(),
-          type: "ASSET_RETURNED",
-          asset: l.asset,
-          loanNum: l.num,
-          returnedBy: "Leela Das",
-          condition: "Good",
-          time: shifts[s.phase].time,
-        });
-        s.notice =
-          "Physical unit AD-12 (Belkin) verified & returned by Leela Das. Slip L-" +
-          l.num +
-          " closed.";
-        break;
-      }
       case "start_reassign":
         s.reassigning = Number(v);
         s.returningLoan = null;
@@ -739,27 +747,27 @@
         s.onlyOpen = v === "0";
         break;
       case "return": {
-        const l = s.loans.find((l) => l.num === Number(v));
-        if (!l || l.back) return;
-        l.back = true;
-        if (s.reassigning === l.num) s.reassigning = null;
-        if (s.returningLoan === l.num) s.returningLoan = null;
-        s.notice = l.asset + " returned to stock. Slip L-" + l.num + " closed.";
+        // Immediate return shortcut: open verification box
+        s.returningLoan = Number(v);
+        s.reassigning = null;
         break;
       }
     }
     commit();
   });
+
   root.addEventListener("change", (e) => {
     if (e.target.matches("[data-filter]")) {
       s.filter = e.target.value;
       commit();
     }
   });
+
   root.addEventListener("submit", (e) => {
     e.preventDefault();
     const f = e.target;
     const form = new FormData(f);
+
     if (f.matches("[data-note]")) {
       const text = String(form.get("note")).trim();
       if (!text) return;
@@ -767,197 +775,160 @@
       commit("Handover note saved.");
       return;
     }
-    if (f.matches("[data-confirm-return]")) {
-      const num = Number(f.dataset.confirmReturn);
-      const l = s.loans.find((l) => l.num === num);
-      if (!l) return;
-      const returnedBy = form.get("returnedBy");
-      const condition = form.get("condition");
-      const disposition = form.get("disposition");
-      l.back = true;
-      l.returnRecord = {
-        returnedAt: shifts[s.phase].time,
-        returnedBy: returnedBy,
-        condition: condition,
-        disposition: disposition,
-      };
-      s.events.push({
-        id: "EVT-" + Date.now(),
-        type: "ASSET_RETURNED",
-        asset: l.asset,
-        loanNum: l.num,
-        returnedBy: returnedBy,
-        condition: condition,
-        disposition: disposition,
-        time: shifts[s.phase].time,
-      });
-      s.returningLoan = null;
-      commit(
-        l.asset +
-          " returned by " +
-          returnedBy +
-          " (" +
-          condition +
-          "). Slip L-" +
-          l.num +
-          " closed.",
-      );
-      return;
-    }
+
+    // Two-stage atomic quick kit checkout
     if (f.matches("[data-quick-kit]")) {
       const reqId = f.dataset.quickKit;
       const r = getReq(reqId);
       if (!r) return;
       const who = form.get("who");
       const due = form.get("due");
-      let nextNum = Math.max(...s.loans.map((l) => l.num), 400);
-      const issuedSlips = [];
-      const binList = [];
-
+      const chosenUnits = {};
       for (const itemType of r.items) {
-        const alreadyIssued = s.loans.some(
-          (l) => l.req === reqId && !l.back && getAsset(l.asset).type === itemType,
-        );
-        if (alreadyIssued) continue;
-
-        const chosenAssetId = form.get("asset_" + itemType);
-        let unit = chosenAssetId ? getAsset(chosenAssetId) : null;
-        if (!unit || unit.repair || out(unit.id)) {
-          unit = assets.find(
-            (a) => a.type === itemType && !a.repair && !out(a.id),
-          );
-        }
-        if (!unit) continue;
-
-        nextNum++;
-        s.loans.push({
-          num: nextNum,
-          req: reqId,
-          asset: unit.id,
-          who: who,
-          due: due,
-          back: false,
-        });
-        s.events.push({
-          id: "EVT-" + (nextNum + 100),
-          type: "ASSET_ISSUED",
-          asset: unit.id,
-          loanNum: nextNum,
-          req: reqId,
-          actor: who,
-          time: shifts[s.phase].time,
-        });
-        issuedSlips.push("L-" + nextNum + " (" + unit.id + ")");
-        binList.push(unit.id + " at Bin " + unit.bin);
+        chosenUnits[itemType] = form.get("asset_" + itemType);
       }
 
-      commit(
-        "Issued complete kit to " +
-          who +
-          " [" +
-          issuedSlips.join(", ") +
-          "]. Collect from: " +
-          binList.join(", ") +
-          ".",
-      );
+      try {
+        const slips = executeKitCheckout(s, reqId, who, due, chosenUnits);
+        const slipList = slips.map((sl) => "L-" + sl.num + " (" + sl.asset + ")");
+        const binList = slips.map((sl) => sl.asset + " at Bin " + getAsset(sl.asset).bin);
+        commit(
+          "Issued complete kit to " +
+            who +
+            " [" +
+            slipList.join(", ") +
+            "]. Collect from: " +
+            binList.join(", ") +
+            ".",
+        );
+      } catch (err) {
+        s.notice = "⚠️ Checkout Failed: " + err.message;
+        paint();
+      }
       return;
     }
+
+    // Physical tag verification for morning handover
+    if (f.matches("[data-verify-morning]")) {
+      const loanNum = form.get("loanNum");
+      const presentedTag = form.get("presentedTag");
+      try {
+        const closedLoan = executeReturn(
+          s,
+          loanNum,
+          presentedTag,
+          "Leela Das",
+          "Good",
+          "Returned to shelf (Bin C4)",
+        );
+        commit(
+          "Physical unit " +
+            closedLoan.asset +
+            " verified and accepted from Leela Das. Slip L-" +
+            closedLoan.num +
+            " closed.",
+        );
+      } catch (err) {
+        s.notice = "⚠️ Verification Error: " + err.message;
+        paint();
+      }
+      return;
+    }
+
+    // Physical tag verification for individual return slips
+    if (f.matches("[data-confirm-return]")) {
+      const loanNum = f.dataset.confirmReturn;
+      const presentedTag = form.get("presentedTag");
+      const returnedBy = form.get("returnedBy");
+      const condition = form.get("condition");
+      const disposition = form.get("disposition");
+
+      try {
+        const closedLoan = executeReturn(
+          s,
+          loanNum,
+          presentedTag,
+          returnedBy,
+          condition,
+          disposition,
+        );
+        s.returningLoan = null;
+        commit(
+          closedLoan.asset +
+            " returned by " +
+            returnedBy +
+            " (" +
+            condition +
+            "). Slip L-" +
+            closedLoan.num +
+            " closed.",
+        );
+      } catch (err) {
+        s.notice = "⚠️ Return Error: " + err.message;
+        paint();
+      }
+      return;
+    }
+
+    // Custody transfer
     if (f.matches("[data-reassign]")) {
-      const num = Number(f.dataset.reassign);
-      const l = s.loans.find((l) => l.num === num);
-      if (!l) return;
+      const loanNum = f.dataset.reassign;
       const who = form.get("who");
       const due = form.get("due");
       const noteText = String(form.get("note")).trim();
-      const oldWho = l.who;
-      l.who = who;
-      l.due = due;
-      if (noteText) {
-        s.notes.push({
-          phase: s.phase,
-          text:
-            "Slip L-" +
-            l.num +
-            " (" +
-            l.asset +
-            ") custody transferred from " +
-            oldWho +
-            " to " +
+
+      try {
+        const updated = executeCustodyTransfer(s, loanNum, who, due, noteText);
+        s.reassigning = null;
+        commit(
+          "Slip L-" +
+            updated.num +
+            " custody transferred to " +
             who +
-            " (Due " +
-            due +
-            "). Note: " +
-            noteText,
-        });
+            " (Originally: " +
+            updated.originalBorrower +
+            "). Note logged in Desk book.",
+        );
+      } catch (err) {
+        s.notice = "⚠️ Transfer Error: " + err.message;
+        paint();
       }
-      s.events.push({
-        id: "EVT-" + Date.now(),
-        type: "CUSTODY_TRANSFERRED",
-        asset: l.asset,
-        loanNum: l.num,
-        from: oldWho,
-        to: who,
-        time: shifts[s.phase].time,
-      });
-      s.reassigning = null;
-      commit(
-        "Custody for Slip L-" +
-          l.num +
-          " transferred to " +
-          who +
-          " (Due " +
-          due +
-          "). Handover note logged in Desk book.",
+      return;
+    }
+
+    // Single issue slip form
+    if (f.matches("[data-issue]")) {
+      const [req, asset, who, due] = ["req", "asset", "who", "due"].map((k) =>
+        form.get(k),
       );
-      return;
+      const chosen = {};
+      const unit = getAsset(asset);
+      if (!unit) {
+        s.notice = "⚠️ Asset does not exist.";
+        paint();
+        return;
+      }
+      chosen[unit.type] = asset;
+
+      try {
+        const slips = executeKitCheckout(s, req, who, due, chosen);
+        s.editing = false;
+        commit("Issued " + asset + " to " + who + " on slip L-" + slips[0].num + ".");
+      } catch (err) {
+        s.notice = "⚠️ " + err.message;
+        paint();
+      }
     }
-    if (!f.matches("[data-issue]")) return;
-    const [req, asset, who, due] = ["req", "asset", "who", "due"].map((k) =>
-      form.get(k),
-    );
-    const unit = getAsset(asset),
-      r = getReq(req);
-    if (!r || !unit || unit.repair || out(asset) || !people.includes(who))
-      return;
-    if (!r.items.includes(unit.type)) {
-      q("[data-status]").textContent =
-        "This equipment type is outside the approved request. Choose an approved unit.";
-      return;
-    }
-    if (
-      s.loans.some(
-        (l) => l.req === req && !l.back && getAsset(l.asset).type === unit.type,
-      )
-    ) {
-      q("[data-status]").textContent =
-        "The approved quantity of this equipment type is already on loan.";
-      return;
-    }
-    const num = Math.max(...s.loans.map((l) => l.num)) + 1;
-    s.loans.push({ num, req, asset, who, due, back: false });
-    s.events.push({
-      id: "EVT-" + (num + 100),
-      type: "ASSET_ISSUED",
-      asset: asset,
-      loanNum: num,
-      req: req,
-      actor: who,
-      time: shifts[s.phase].time,
-    });
-    s.editing = false;
-    commit("Issued " + asset + " to " + who + " on slip L-" + num + ".");
   });
+
   function restore(d) {
     if (
       !d ||
-      d.version !== 1 ||
+      d.version !== 2 ||
       !Object.hasOwn(screens, d.tab) ||
       !shifts[d.phase] ||
       (d.selected && !getReq(d.selected)) ||
       !Array.isArray(d.notes) ||
-      !d.notes.every(
-        (n) => n && shifts[n.phase] && typeof n.text === "string",
-      ) ||
       !Array.isArray(d.loans) ||
       !d.loans.length ||
       !d.loans.every(
@@ -967,20 +938,22 @@
     )
       return;
     s = {
-      ...original(),
+      ...createInitialState(),
       ...d,
+      damagedAssets: Array.isArray(d.damagedAssets) ? [...d.damagedAssets] : [],
       loans: d.loans.map((l) => ({ ...l })),
       notes: d.notes.map((n) => ({ ...n })),
       events: Array.isArray(d.events)
         ? d.events.map((e) => ({ ...e }))
-        : original().events,
+        : createInitialState().events,
     };
     paint();
   }
+
   paint();
   try {
     restore(JSON.parse(localStorage.getItem(storageKey)));
   } catch {
-    // Keep the fresh shift when storage is unavailable or the saved data is invalid.
+    // Keep fresh shift when storage fails
   }
 })();

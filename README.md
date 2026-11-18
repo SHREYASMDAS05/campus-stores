@@ -4,38 +4,43 @@ Campus Stores is a Product Engineer work sample set at a fictional campus media 
 
 ---
 
-## 📌 Executive Summary of Changes (Reviewer Guide)
+## 📌 Executive Summary of Engineering Enhancements (Reviewer Guide)
 
-To transform Campus Stores from a **passive ledger** into an **asset-aware, guided equipment lifecycle system**, the following engineering enhancements were implemented:
+To transform Campus Stores from a **passive ledger** into an **asset-aware, guided equipment lifecycle management system**, the core domain logic was extracted into a shared, testable engine (`campus-stores-core.js`) and wired into both the client app (`app.js`) and an automated test suite (`test-shift.js`).
 
-| # | Improvement Area | Original Behavior | Enhanced Implementation | File / Component |
+### Summary of Key Fixes & Architecture:
+
+| # | Improvement Area | Original Behavior | Enhanced Production Implementation | Primary Component |
 |---|---|---|---|---|
-| 1 | **Multi-Item Kit Checkout** | 3 separate manual issue slips (12 dropdown selections) | **1-Click Atomic Kit Checkout** from Requests tab with bin locations (`A2`, `B1`, `C4`) and physical asset picker | `app.js` (`requestPage()`), `styles.css` |
-| 2 | **Workflow Shift Gate** | Free advance without performing actions | **Workflow Guardrails (`canAdvanceShift`)**: blocks time advancement until required pickup/returns are completed | `app.js` (`canAdvanceShift()`) |
-| 3 | **Partial Return & Custody** | Binary `back = true`, no way to record partial custody | **Inline Custody Transfer**: reassigns holder to Leela Das (due Sat 9 am) and auto-logs structured handover note | `app.js` (`register()`), `styles.css` |
-| 4 | **Morning Reconciliation** | Operator must interpret free-text notes | **Contextual Handover Alert Banner** at Sat 9:00 am with 1-click physical tag verification & close | `app.js` (`register()`), `styles.css` |
-| 5 | **Physical Unit Verification** | Risk of accepting wrong adapter (`AD-15`) | **Serial Tag Disambiguation**: explicitly enforces `AD-12` (Belkin) vs `AD-15` (Anker) | `app.js` (`return_morning_adapter`) |
-| 6 | **Audit Trail & Event Log** | Only free-text notes in Desk book | **Immutable Audit Log (`s.events`)**: chronological ledger of all issuance, returns, and handovers | `app.js` (`deskbook()`, `s.events`) |
-| 7 | **Automated Acceptance Suite** | No automated tests | **Standalone Test Runner (`test-shift.js`)**: validates all 11 business invariants via `node test-shift.js` | `test-shift.js` |
+| 1 | **Two-Stage Atomic Kit Checkout** | Loops through items and pushes to state without atomic validation; silent fallback | **Two-Phase Commit**: Phase 1 validates all asset types, quantities, repair states, and borrower permissions without touching state. If any item fails, zero state mutation occurs. | `campus-stores-core.js` (`validateKitCheckout`, `executeKitCheckout`) |
+| 2 | **Dynamic Workflow Shift Gate** | Free time advance without checks; or hardcoded asset IDs (`PR-04`, `SP-02`) | **Dynamic Shift Gate**: Derives expected assets directly from actual active loans issued to `RQ-214` (e.g. accommodates `SP-05` as cleanly as `SP-02`). Blocks premature phase advance. | `campus-stores-core.js` (`canAdvanceShift`) |
+| 3 | **Physical Hardware Tag Verification** | Passive warning message with no actual tag verification on return | **Interactive Tag Verification**: Operator must input the physical tag on hardware. Mismatches (e.g. presenting `AD-15` Anker for `AD-12` Belkin) are strictly rejected with an explicit error. | `campus-stores-core.js` (`validateReturn`, `executeReturn`), `app.js` |
+| 4 | **Dynamic Asset Damage Lifecycle** | Returned damaged hardware remained "On shelf" in inventory | **Dynamic Lifecycle Transition**: Marking an item as "Damaged" or "Send to Workshop" immediately transitions its status to `In repair`, preventing re-loan. | `campus-stores-core.js` (`getAssetStatus`, `damagedAssets`) |
+| 5 | **Custody Transfer History** | Overwrote original borrower when reassigning custody | **Custody Lineage Tracking**: Preserves `originalBorrower: "Kabir Sen"` while tracking `currentCustodian: "Leela Das"` and logging chronological `custodyHistory`. | `campus-stores-core.js` (`executeCustodyTransfer`) |
+| 6 | **Precise Morning Handover Query** | Broad OR query (`Leela Das` OR `RQ-214` OR `Sat 9 am`) | **Deterministic Handover Matching**: Specifically targets the outstanding Film Society screening adapter loan for morning reconciliation. | `campus-stores-core.js` (`getMorningOutstandingLoan`) |
+| 7 | **Audit Trail & XSS Protection** | Free-text notes only | **Immutable Event Log (`s.events`)**: Append-only operational event ledger with DOM escaping on all user-controlled properties. | `app.js` (`deskbook()`), `campus-stores-core.js` |
+| 8 | **Automated Acceptance Testing** | No automated tests | **Direct Production Testing**: 11 acceptance and domain invariant tests executed directly against `campus-stores-core.js`. | `test-shift.js` |
 
 ---
 
-### 🕹️ How Reviewers Can Test the Changes:
+### 🕹️ How Reviewers Can Test the Workflow:
 
-1. **Friday · 3:45 pm (1-Click Pickup)**:
+1. **Friday · 3:45 pm (1-Click Atomic Kit Pickup)**:
    * Open `index.html` in your browser.
    * Go to **Requests** $\rightarrow$ click **View form** on `RQ-214` (Film Society).
-   * Note the live shelf bin locations (`PR-04 · Bin A2`, `SP-02 · Bin B1`, `AD-12 · Bin C4`).
+   * Note the live shelf bin locations (`PR-04 · Bin A2`, `SP-02 / SP-05 · Bin B1/B2`, `AD-12 · Bin C4`).
+   * Select the physical units (e.g. `PR-04`, `SP-05`, `AD-12`).
    * Click **`⚡ Issue Complete Kit (3 items)`** $\rightarrow$ all 3 slips (`L-402`, `L-403`, `L-404`) are created atomically.
-   * *(Note: Try clicking "Move to return time" before issuing: notice the Shift Gate blocks invalid transitions!)*
+   * *(Note: If you click "Move to return time" before issuing, the Shift Gate blocks invalid advancement!)*
 2. **Friday · 7:30 pm (Partial Return & Custody Transfer)**:
    * Click **"Move to return time"** in the top shift bar.
-   * In **Loan register**, click **Record return** for Projector (`L-402`) and Speaker (`L-403`) with condition verification.
-   * On Adapter (`L-404`), click **Custody / Note** $\rightarrow$ reassign to **Leela Das (Due Sat 9 am)** with a handover note.
-3. **Saturday · 9:00 am (Morning Reconciliation)**:
+   * In **Loan register**, click **Record return** for Projector (`L-402`) and Speaker (`L-403`) with physical tag check and condition inspection.
+   * On Adapter (`L-404`), click **Custody / Note** $\rightarrow$ reassign to **Leela Das (Due Sat 9 am)** with a handover note. Notice the original borrower `Kabir Sen` is preserved.
+3. **Saturday · 9:00 am (Morning Physical Tag Verification)**:
    * Click **"Move to next morning"**.
-   * In **Loan register**, a prominent **Morning Handover Task** banner surfaces for Leela Das.
-   * Click **`⚡ Verify AD-12 & Close Slip`** $\rightarrow$ verifies physical tag `AD-12` (rejecting `AD-15`) and reconciles `RQ-214` 100%!
+   * In **Loan register**, the **Morning Handover Task** banner surfaces specifically for the Film Society adapter.
+   * Enter physical tag `AD-15` and submit $\rightarrow$ Notice the application **strictly rejects the mismatch** with an explanatory warning.
+   * Enter physical tag `AD-12` and submit $\rightarrow$ Successfully verified, closed, and reconciled!
 4. **Audit Trail**:
    * Open **Desk book** to inspect the append-only **Audit Trail & Event Log** recording all operations.
 5. **Run Automated Invariant Tests**:
@@ -44,7 +49,6 @@ To transform Campus Stores from a **passive ledger** into an **asset-aware, guid
    ```
 
 ---
-
 
 ## Run the app
 
@@ -60,12 +64,15 @@ Each browser stores its own sample shift locally when browser storage is availab
 
 ## Source
 
+- `campus-stores-core.js` contains the centralized domain model, business invariants, and validation rules.
 - `index.html` contains the desk layout, candidate brief, and bundled icons.
-- `app.js` contains the sample records and interactions.
+- `app.js` contains the presentation layer, DOM event handlers, and UI rendering.
 - `styles.css` defines the desktop and mobile layouts.
+- `test-shift.js` executes the automated domain acceptance test suite against `campus-stores-core.js`.
 
 Icon license notices are in [third-party/lucide-LICENSE.txt](third-party/lucide-LICENSE.txt).
 
+---
 
 ## Submit your work
 
@@ -75,12 +82,12 @@ Icon license notices are in [third-party/lucide-LICENSE.txt](third-party/lucide-
 
 ---
 
-# Product Engineer Evaluation & Solution Walkthrough
+# Product Engineer Evaluation & Walkthrough
 
 ### 1. Would you keep this product?
-**Yes, definitely.** The application has strong core fundamentals: clean domain separation (`requests`, `assets`, `loans`, `deskbook`), offline-first zero-dependency architecture, and rock-solid policy guardrails. 
+**Yes, absolutely.** The application has strong core fundamentals: clean domain separation (`requests`, `assets`, `loans`, `deskbook`), offline-first zero-dependency architecture, and rock-solid institutional guardrails. 
 
-However, in its original state, it behaved as a **passive ledger** rather than an **active operational workflow tool**. Operators were forced to manually bridge the gaps between what was requested, what was leaving the desk, and what was communicated in handover notes. With the operational enhancements introduced below, the product transforms into a high-velocity counter copilot that eliminates manual data entry bottlenecks.
+However, in its original state, it operated as a **passive ledger** rather than an **active operational workflow tool**. Operators were forced to manually bridge the gaps between what was requested, what was leaving the desk, and what was communicated in handover notes. With the operational enhancements introduced, the product transforms into a high-velocity counter tool that guarantees asset-level inventory integrity.
 
 ---
 
@@ -100,56 +107,61 @@ However, in its original state, it behaved as a **passive ledger** rather than a
   3. **Saturday 9:00 am**: Leela walks in with an adapter. The new morning operator saw a loan under *Kabir Sen*, with zero visual connection to Leela or the screening kit.
 
 #### The Implemented Solution (Our Changes):
-1. **1-Click Atomic Kit Checkout (`Requests` View)**:
-   * When viewing any approved request (e.g. `RQ-214`), the app now displays a **Live Desk Status** breakdown for each required item, showing ready units and their exact shelf bins (`PR-04 · Bin A2`, `SP-02 · Bin B1`, `AD-12 · Bin C4`).
-   * A **"⚡ Quick Kit Checkout"** panel allows the operator to select the collector (defaults to Kabir Sen) and click **"⚡ Issue Complete Kit (3 items)"**. All 3 slips are generated atomically in **one click** with pre-computed shelf bin locations.
-2. **Partial Return & Custody Transfer (`Loan Register`)**:
-   * Outstanding slips now include a **"Custody / Note"** action. When Kabir returns the projector and speaker at 7:30 pm, the operator can reassign the remaining adapter slip (`L-404`) to **Leela Das (Due Sat 9 am)** with an inline handover note. This updates the slip holder and automatically logs a structured handover note to the Desk book.
-3. **Contextual Morning Handover Alert (`Saturday 9:00 am`)**:
-   * When the Saturday morning shift opens, a prominent alert banner appears at the top:
-     > 🔔 **Morning Handover Task (9:00 am):** Leela Das is here to return **AD-12 (USB-C → HDMI adapter · Slip L-404)** for Film Society.
-   * With a single click on **`⚡ Accept Return from Leela & Close Slip`**, the slip is closed and the unit is restored to stock in 1 second.
+1. **Two-Stage Atomic Kit Checkout (`Requests` View)**:
+   * When viewing any approved request (e.g. `RQ-214`), the app displays a **Live Desk Status** breakdown for each required item, showing ready units and their exact shelf bins (`PR-04 · Bin A2`, `SP-02/SP-05 · Bin B1/B2`, `AD-12 · Bin C4`).
+   * A **"⚡ Quick Kit Checkout"** panel validates all items before issuing. All slips are generated atomically in **one click** with pre-computed shelf bin locations.
+2. **Partial Return & Custody Lineage (`Loan Register`)**:
+   * Outstanding slips now include a **"Custody / Note"** action. When Kabir returns the projector and speaker at 7:30 pm, the operator can reassign the remaining adapter slip (`L-404`) to **Leela Das (Due Sat 9 am)** with an inline handover note. Crucially, the system preserves `originalBorrower: Kabir Sen` while tracking `who: Leela Das` and appending to `custodyHistory`.
+3. **Interactive Physical Tag Verification (`Saturday 9:00 am`)**:
+   * When the Saturday morning shift opens, a prominent alert banner surfaces the outstanding adapter loan specifically for `RQ-214`.
+   * The operator inputs the physical tag on the returned unit. If Leela presents `AD-15` (Anker), the system **strictly rejects the mismatch**. Only when `AD-12` (Belkin) is presented is the loan reconciled and closed.
+4. **Dynamic Damage Handling**:
+   * Returning hardware marked "Damaged" or "Send to Workshop" immediately updates its dynamic lifecycle status to `In repair`, preventing it from reappearing "On shelf".
 
 ---
 
-### 4. Real Counter Observation Metric
-* **Primary Observation**: Can the morning-shift employee identify and reconcile the exact outstanding physical asset without asking the previous employee for clarification?
-* **Measurable Metrics**:
-  * **Counter Dwell Time during Peak Rush**: Issuing a 3-item kit dropped from **~90 to 120 seconds** (12 dropdown selections across 3 manual forms) down to **under 5 seconds** (~95% reduction in counter dwell time).
-  * **Physical Tag Mismatch Rate**: Dropped to **0%**, because the morning reconciliation banner explicitly forces tag verification between `AD-12` (Belkin) and `AD-15` (Anker).
-  * **Shift Transition Integrity**: Shift gate validation prevents operators from advancing time without completing pickups or returns, eliminating missing equipment handovers.
+### 4. Proposed Usability Evaluation & Counter Metrics
+
+Rather than claiming speculative historical metrics, the following quantitative criteria are proposed for field evaluation at a physical desk:
+
+| Metric | Measurement Method | Target Goal |
+|---|---|---|
+| **Reconciliation Dwell Time** | Clock time from student arrival to slip closure at 9:00 am | Target reduction from ~60s of manual search to < 10s via contextual alert banner |
+| **Physical Tag Mismatch Rate** | Logged instances of closing a loan against the wrong asset ID (e.g. `AD-15` vs `AD-12`) | Target 0% error rate enforced by physical tag input validation |
+| **Peak Rush Checkout Duration** | Seconds elapsed during multi-item kit checkout at 3:45 pm | Target reduction from ~90s (3 separate forms) to < 10s (atomic checkout) |
+| **Shift Transition Integrity** | Number of unreturned assets missing handover notes | 0 uncommunicated items, enforced by shift gate pre-conditions |
 
 ---
 
-### 5. Automated Acceptance Test Suite
+### 5. Automated Acceptance Test Suite (`test-shift.js`)
 
-An end-to-end acceptance and domain invariant test suite is included in `test-shift.js`. It rigorously validates the entire scenario and business invariants across 11 checks:
+An automated test suite is included in `test-shift.js`. It runs directly against `campus-stores-core.js` and validates all 11 business invariants:
 
 ```sh
 node test-shift.js
 ```
 
 **Verified Invariants**:
-1. Initial starting records contain exactly 1 active loan (`Debate Union MI-09`).
+1. Initial starting records contain exactly 1 active loan (`Debate Union MI-09`) and clean damage log.
 2. Shift Gate blocks advancing to Friday evening if Film Society kit has not been issued.
-3. Inventory Guardrail rejects issuing `PR-06` (in Workshop repair).
+3. Inventory Guardrail rejects issuing `PR-06` (in Workshop repair) without state mutation.
 4. Request Guardrail rejects issuing equipment outside approved request.
-5. 1-Click Kit Checkout issues complete kit (`PR-04`, `SP-02`, `AD-12`) to Kabir Sen.
-6. Separate individual physical slips created (`L-402`, `L-403`, `L-404`).
-7. Shift Gate blocks Saturday morning advance until partial return is logged.
-8. Structured Partial Return closes `PR-04` and `SP-02` while keeping `AD-12` outstanding.
-9. Custody Transfer reassigns `AD-12` (`L-404`) to Leela Das and logs structured handover entry.
-10. Shift Gate allows morning advance after reconciliation.
+5. Two-Stage Atomic Checkout aborts cleanly with zero state mutation when any item fails validation.
+6. Atomic Kit Checkout issues flexible physical assets (e.g. `PR-04`, `SP-05`, `AD-12`) atomically.
+7. Separate physical slips (`L-402`, `L-403`, `L-404`) track `originalBorrower`.
+8. Shift Gate dynamically validates actual issued physical units (e.g. `SP-05`) and blocks morning advance until partial returns are logged.
+9. Structured Return of damaged hardware dynamically transitions its inventory status to `In repair`.
+10. Custody Transfer preserves `originalBorrower: Kabir Sen` while tracking `who: Leela Das` and appending `custodyHistory`.
 11. Physical asset disambiguation rejects wrong asset tag (`AD-15`), verifies `AD-12`, and reconciles `RQ-214` 100% while keeping `MI-09` open.
 
 ---
 
-### 6. Architectural Depth: Scaling to Distributed Multi-Counter Operations with Redis
+### 6. Architectural Proposal: Scaling to Distributed Multi-Counter Operations with Redis
 
-While a local offline-first architecture is ideal for single-terminal reliability, scaling this system across multiple campus desks requires a distributed backend. Here is how **Redis** solves the high-concurrency challenges:
+While a local offline-first architecture is ideal for single-terminal reliability, scaling this system across multiple campus desks requires a distributed backend. Here is the proposed architecture using **Redis**:
 
 1. **Distributed Atomic Locks (Preventing Asset Double-Booking)**:
-   * When multiple counter operators attempt to assign the last available projector (`PR-04`) simultaneously, an atomic Redis Lua script / Redlock ensures strict mutual exclusion:
+   * When multiple counter operators attempt to assign the last available projector (`PR-04`) simultaneously, an atomic Redis Lua script / Redlock ensures mutual exclusion:
      ```lua
      if redis.call('GET', KEYS[1]) == 'AVAILABLE' then
          redis.call('SET', KEYS[1], ARGV[1])
@@ -162,5 +174,3 @@ While a local offline-first architecture is ideal for single-terminal reliabilit
    * When a club confirms an upcoming pickup, assets are placed on a temporary 15-minute hold (`SET hold:RQ-214 "Kabir Sen" EX 900`). If unclaimed within 15 minutes, Redis keyspace notifications automatically return the assets to general inventory.
 3. **Real-Time Cross-Desk Handover Sync (Redis Pub/Sub & Streams)**:
    * When custody is transferred to Leela Das at Desk 1, a Redis Stream event (`custody:transferred`) broadcasts to all connected counter terminals via WebSockets, ensuring the morning shift terminal reflects pending handovers instantly without manual refresh.
-
-
